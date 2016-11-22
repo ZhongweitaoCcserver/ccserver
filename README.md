@@ -1,4 +1,4 @@
-What is Ccserver?
+What is ccserver?
 -------------------------------------------------------------------
 Ccserver is a concurrency server demo, multithreaded, runs on Linux. 
 Compiler environment: C++ 11, google protobuf, google tcmalloc.
