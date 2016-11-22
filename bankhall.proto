@@ -1,0 +1,70 @@
+syntax="proto3";
+package ccserver;
+
+message time_stamp
+{
+   sint64 stamp = 1;                     //time, int64 for c++
+   string label = 2;                     //by who marked the stamp, and where 
+   string stamp_str = 3;                 //time in str, for log etc.
+}
+
+message app_inter
+{
+   sint32 listen_fid       = 2;          //int32 for c++;
+   sint32 epoll_fid        = 3;          //int32 for c++;
+   sint32 conn_fid         = 4;          //int32 for c++;
+   string cipher           = 5;          //conn_fid cout be duplicated, we store every connected fd infomation in 
+                                         //a threadsafe_map<connected_fid, class_to_be_do_connected_fid>.
+                                         //this field is the cipher which is verified in threadsafe_map.withdraw ;
+   string fid_type         = 6;          //
+   string bussness_name    = 7;          //
+   sint32 command          = 8;          //
+   string args_class       = 9;          //for args, the class name, is exists!
+   sint32 args_cont_idx    = 10;         //this is the idx for it;
+   string info             = 11;         //for more infomation, separate by ";"
+   bytes  busness_msg      = 14;         // withdraw, deposit receive from out_side.
+   repeated time_stamp ts  = 15;         //always 15, for time_stamp
+}
+
+message outs_head
+{
+   sint32  feedback_port  =1;         //feedback port, if the messages was handled, message should be feebacked at this port! 
+                                      //why not use the connected id?  cause the meesage could be transfered again by the backup_server, hehe.
+                                      //so, the connected id between this(app.) and backup_server, is only for message out, not for feedback!
+                                      //the feeback msg could be send from another machine.
+   string  feeback_ip     =2;
+   string  message_id     =3;         //for every meesage to be outsourcing, we should store it and keep waitting respond.
+   string  whoami         =4;         //the name of mine!
+   string  signature      =5;         //my signature(message_id, whoami), the verification code! for all users in this concurrency business scope.
+   string info            =6;         //for more infomation, separate by ";"
+   repeated time_stamp ts =14;        //
+}     
+
+message outsourcing 
+{
+   repeated outs_head  head   =1;       
+   bytes   data               = 15;           //unknow message. could be another protobuf message, no care.
+}
+
+message withdraw                          //everyone who had transfered this msg, and expect of a feedback, should give it a head with his signature.
+{                                         //if store the msg, should expect of a feedback. no store no feedback! 
+   string bus_msg_id = 1;                 //this is a bussiness message id, the message would be store in a queue(process by myself), or threadsafe_map<message_id, sale>
+   string serial_no  = 2;                 
+   string card_no    = 3;                 
+   sint32 amount     = 4;                 
+   string customer   = 5;                 
+   string time       = 6;                 
+   repeated time_stamp ts = 15;           //always 15, for time_stamp
+}                                         
+                                          
+                                          
+message deposit {                         
+   string bus_msg_id = 1;                 //this is a bussiness message id, the message would be store in a queue(process by myself), or threadsafe_map<message_id, sale>
+   string serial_no  = 2;                 
+   string card_no    = 3;                 
+   sint32 amount     = 4;                 
+   string customer   = 5;                 
+   string time       = 6;                 
+   repeated time_stamp ts = 15;           //always 15, for time_stamp
+}
+
