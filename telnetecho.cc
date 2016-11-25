@@ -60,7 +60,7 @@ int telnetecho::process_fire_event(epoll_event fire_event, int *keepalive_sec)
         }       
     }
     
-    *keepalive_sec = 300; //five minus alive. 
+    *keepalive_sec = 120; //five minus alive. 
     if (_out_sds_buf.size() > 0) {
         int ret = write_out_data();
         if (0 == cmd_shutdown){

@@ -255,6 +255,7 @@ void epollreactor::_remove_client(int cfd, bool timer_fired)
 {
     char errmsg[ANET_ERR_LEN];
 
+    //CCSERVERLOG(CLL_DEBUG, "_remove_client cfd:%d", cfd);
     if (not timer_fired)
     {
         //need to remove cfd from _spare_wheel and _in_use_wheel;
@@ -417,27 +418,38 @@ void epollreactor::_wait_working_thread()
     }
 }
 
+
+//int                                         epollreactor::_timer_interval_sec = -1; // if _timer_bucket_cnt < 0; don't check Keepalive Client.
+//int                                         epollreactor::_timer_bucket_cnt =10;   //_timer_interval_sec * _timer_bucket_cnt == _circle_time_sec;
 //called after process_fire_event.
 void epollreactor::_update_client_alive_sec(int cfd, int alive_sec)
 {
-    if (alive_sec >= _circle_time_sec ){
+    int remain_sec = (_timer_bucket_cnt - _cur_bucket_idx) * _timer_interval_sec;
+       
+    if (alive_sec >= remain_sec ){
         _in_use_wheel.erase(cfd);//erase by key, no need check!
         //save in _spare_wheel;
-        //CCSERVERLOG(CLL_DEBUG, "keep in _spare_wheel;");
+        //CCSERVERLOG(CLL_DEBUG, "keep in _spare_wheel; alive_sec:%d,  remain_sec:%d", alive_sec, remain_sec);
+        alive_sec -= remain_sec;
         _spare_wheel[cfd] = alive_sec;
         return;
     }   
+    //CCSERVERLOG(CLL_DEBUG, "keep in _insert_in_use_wheel;");
     _insert_in_use_wheel(cfd, alive_sec);
 }
 
 
 void epollreactor::_insert_in_use_wheel(int cfd, int alive_sec)
 {
-    int idx = alive_sec / _timer_interval_sec;
-    if ( idx > _timer_bucket_cnt ) {return;}
+    int idx = (alive_sec + _timer_interval_sec ) / _timer_interval_sec  -1 ;
     
+    if ( idx > _timer_bucket_cnt ) {return;}
+    //if ( idx < 0 ) idx = 0;
+    
+    //CCSERVERLOG(CLL_DEBUG, "_insert_in_use_wheel alive_sec:%d, idx:%d _timer_interval_sec:%d", alive_sec, idx, _timer_interval_sec);
     idx = ( _cur_bucket_idx + idx  ) % _timer_bucket_cnt;
-    //CCSERVERLOG(CLL_DEBUG, "_insert_in_use_wheel idx:%d", idx);
+    //CCSERVERLOG(CLL_DEBUG, "_insert_in_use_wheel _cur_bucket_idx:%d, idx:%d _timer_bucket_cnt:%d", _cur_bucket_idx, idx, _timer_bucket_cnt);
+    //
     _in_use_wheel.insert(make_pair(cfd, idx) );
 }
 
@@ -463,13 +475,13 @@ void epollreactor::_remove_dead_client()
     //move data from _spare_wheel; //_in_use_wheel one circle time. _circle_time_sec
     for(auto it = _spare_wheel.begin(); it != _spare_wheel.end(); ) 
     {
-        it->second -= _circle_time_sec;  
         if (it->second < _circle_time_sec)
         {   //move it to _insert_in_use_wheel
             //CCSERVERLOG(CLL_DEBUG, "move data from _spare_wheel.");
             _insert_in_use_wheel(it->first, it->second);
             it = _spare_wheel.erase(it); //only for C++11, C++98 not support!
         }else {
+            it->second -= _circle_time_sec;  
             ++it;
         }
     }
