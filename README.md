@@ -185,7 +185,7 @@ ccserver有三个核心类:tcp_port, client, epollreactor;
   
   client与port相比，复杂太多, 而且，数据和功能, 针对不同业务都会有很大的扩展。
   
-  client的基类也实现就做了最小的功能：为接收和发送设置缓冲, 提供接收和发送的实现, 和存放对端的地址信息，这些是每个连接最基本的数据和功能; 
+  client的基类也就实现了最小最基本的功能：为接收和发送设置缓冲, 提供接收和发送的实现, 和存放对端的地址信息，这些是每个连接最基本的数据和功能; 
             
   它的业务处理逻辑只是一个pingpong， 收到包原样返回。
             
@@ -298,11 +298,17 @@ epollreactor的内部流程说明:
     
 编译说明:
 需要用到两个库, -lprotobuf -ltcmalloc, 编译前请先安装.
+
 编译ccpp_client, 需要定义宏CCSERVER_PP_CLIENT, 用这行
+
 CPPFLAGS = -g -O3 -Wall -DUSE_TCMALLOC -std=c++11 -lz -lprotobuf -ltcmalloc -DCCSERVER_PP_CLIENT
+
 编译ccserver, 则用这行
+
 CPPFLAGS = -g -O3 -Wall -DUSE_TCMALLOC -std=c++11 -lz -lprotobuf -ltcmalloc    
+
 自行修改makefle,
+
  
 
 
