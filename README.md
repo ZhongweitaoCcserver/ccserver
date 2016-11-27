@@ -1,16 +1,26 @@
 关于 ccserver 
 -----------
 ccserver 是一个C++开发的, 可运行在Linux上的高并发服务器样例程序。主要运用非阻塞TCP, epoll技术，支持多线程。
+
 ccserver 相比起网格上流行的libevent等流行的网络库, 在性能上更占优势，因为它对底层tcp各函数运用更直接。
+
 ccserver 更大的优势在于使用上的便利性，采用面向对象方法。更简洁高效的实现, 无论是二次开发或者是维护上，其优势是不言而喻的。
 
+
 先说性能上的优势，虽然它可能不是主要的，不过它能更直接说明问题: 
+
 ccserver_test/single_thread_test_report.txt 这是一个与libevent的测试比较报告。
+
 这里只摘录一部份作说明。
+
 ccserver，ccpp_client: 这是我开发的ccserver, 和客户端;
+
 libevent server , libevent client: 这是来自陈硕的测试程序, 他开发一个网络库moduo，与我的实现是大不相同的, 在github上你可以找到。
+
 由于我找来libevent 的测试程序只支持单线程，我也只好用单线程来进行比较;
+
 ccpp_client 的命令行参数msg_size即是一次数据发送，包含数据包的个数。
+
 msg_size: 1 Threads: 1 Sessions: 1 timeout: 30                                  #单线程,包文大小109字节，单连接，测试30秒
 *****************ccserver Vs ccpp_client *********************************************
 4356: 21 Nov 19:29:54.392 * CCPP_CLIENT Begin! --server.cc:149                  #CASE_1, 服务器和客户端都是我的实现
