@@ -134,17 +134,6 @@ void epollreactor::_accept_tcp_handler(int fd)
         new_cli_ptr->set_cport(cport);
         
         add_client(new_cli_ptr);// static epollreactor::add_client
-        //if (_reactors.size() > 0) {
-        //    ++which_reactor;
-        //    which_reactor = which_reactor % _reactors.size();
-        //}
-        //
-        //if ( which_reactor != 0)
-        //{    //muti reactor, muti thread. dispatch it to every reactors.
-        //    _reactors[which_reactor]->_add_client_lock(new_cli_ptr);//thread_safe call. 
-        //} else{//same thread, more efficiently.
-        //    _reactors[0]->_add_client_nolock(new_cli_ptr);
-        //}  
     }
 }
 
@@ -232,10 +221,10 @@ void epollreactor::_add_all_client()
     }
 }
 
+/*
 void epollreactor::_add_client_nolock(client_ptr &new_client)
 {
-    int  client_cfds[MAX_CLIENT_FD_NUM];
-    
+    int  client_cfds[MAX_CLIENT_FD_NUM];    
     int client_cfds_len = MAX_CLIENT_FD_NUM;
     int ret = new_client->register_events(_efid, client_cfds, &client_cfds_len);
     if (ret == ANET_ERR){
@@ -247,10 +236,78 @@ void epollreactor::_add_client_nolock(client_ptr &new_client)
     for (int idx = 0; idx < client_cfds_len; ++idx)
     {
         _cl_map.insert(make_pair(client_cfds[idx], new_client) ); 
+        //
+        if (idx >0){
+            _cl_fid_mmap.insert(make_pair(client_cfds[0], client_cfds[idx]));  
+        }
+        //
+    }    
+}
+*/
+void epollreactor::_add_client_nolock(client_ptr &new_client)
+{
+    std::vector<int> client_cfds;
+    
+    int ret = new_client->register_events(_efid, client_cfds);
+    if (ret == ANET_ERR){
+        CCSERVERLOG(CLL_WARNING, "register event failed."); 
+        return;
+    }
+    
+    size_t client_cfds_size = client_cfds.size();
+    if (client_cfds_size ==0 )
+    {
+        CCSERVERLOG(CLL_WARNING, "register event failed, client_cfds_size invalid: 0"); 
+        return;
+    }
+
+    int master_fid = client_cfds[0];
+    _cl_map.insert(make_pair(master_fid, new_client) );    
+    for (size_t idx = 1; idx < client_cfds_size; ++idx) {
+        _cl_map.insert(make_pair(client_cfds[idx], new_client) );  
+        _cl_fid_mmap.insert(make_pair(client_cfds[0], client_cfds[idx]));  
     }    
 }
 
+void epollreactor::_remove_client(int cfd, bool timer_fired)
+{
+    char errmsg[ANET_ERR_LEN];
 
+    //CCSERVERLOG(CLL_DEBUG, "_remove_client cfd:%d", cfd);
+    auto it_cli = _cl_map.find(cfd);
+    if (it_cli == _cl_map.end())
+        return;
+    
+    int master_cfd =  (it_cli->second)->get_cfd();     
+    auto position = _cl_fid_mmap.lower_bound(master_cfd);  
+    while(position != _cl_fid_mmap.upper_bound(master_cfd))  
+    {  
+        int ret = anet_epoll_in_del(errmsg, _efid, position->second);
+        if (ret == ANET_ERR){
+            CCSERVERLOG(CLL_WARNING, " anet_epoll_in_del:%s", errmsg);
+        } 
+        _cl_map.erase(position->second);
+        
+        if ( (not timer_fired) || (cfd != position->second) ) 
+        {
+            //need to remove cfd from _spare_wheel and _in_use_wheel;
+            size_t ret = _spare_wheel.erase(position->second);
+            if (ret <=0) _in_use_wheel.erase(position->second);
+        }
+        ++position;
+    } 
+    
+    _cl_map.erase(master_cfd);
+    _cl_fid_mmap.erase(master_cfd);  
+    if ( (not timer_fired) || (cfd != master_cfd) )  
+    {
+            //need to remove cfd from _spare_wheel and _in_use_wheel;
+            size_t ret = _spare_wheel.erase(master_cfd);
+            if (ret <=0) _in_use_wheel.erase(master_cfd);
+    }    
+}
+
+/*
 void epollreactor::_remove_client(int cfd, bool timer_fired)
 {
     char errmsg[ANET_ERR_LEN];
@@ -272,9 +329,8 @@ void epollreactor::_remove_client(int cfd, bool timer_fired)
         CCSERVERLOG(CLL_WARNING, " anet_epoll_in_del:%s", errmsg);
         //skip error!!!
     }
-    _cl_map.erase(it_cli); 
-    
-}
+    _cl_map.erase(it_cli);    
+}*/
 
 void epollreactor::_work_loop()
 {
@@ -318,7 +374,8 @@ void epollreactor::_work_loop()
                 }
                 
                 if ((_timer_interval_sec > 0) &&( alive_sec >= 0))  {
-                    _update_client_alive_sec(events[idx].data.fd, alive_sec);
+                    int cfd = it_cli->second->get_cfd(); //a client's master_cfd.
+                    _update_client_alive_sec(cfd, alive_sec);
                 }
             }
             else
@@ -336,7 +393,7 @@ void epollreactor::_work_loop()
         
         if (client_write_pending.size() == 0)
         {
-            if (_timer_fired) {
+            if ((_timer_interval_sec > 0) && _timer_fired) {
                 _remove_dead_client();
             }   
             continue;
@@ -365,7 +422,7 @@ void epollreactor::_work_loop()
         client_write_pending.swap(client_write_pending_delay);   
 
         //kick off idle connect!  to be fixed!
-        if (_timer_fired) {
+        if ((_timer_interval_sec > 0) && _timer_fired) {
             _remove_dead_client();
         }        
     }

@@ -1,0 +1,76 @@
+这个ccserver, 是我自己用C++写的一个linux并发服务器样例程序, 里面的核心架构完全是我自己设计编码(epollreactor, client, tcpport三个类)
+虽然只是一个demo, 可是, 它已经完全体现了高并发服务器的一个基本框架, 这个设计也能适应大多数并发服务器使用场景。
+我也用到了redis开源程序中一些源代码(如sds, anet, 我对它们做了最小的变动, 主要是C++封装.)
+可以肯定的跟你说, 我的这个实现, 绝对不会比libevent, asio的实现效率差, 甚至可以说我比它们还要高效。 
+当然, libevent等已经足够快, 不大会成为服务器的瓶颈, 因为它们已经充分地利用了带宽, 通常网络带宽才是瓶颈。
+libevent跨平台, 稳定, 众多优秀的公司，产品在使用它。而我这个毕竟只是个人开发, 新鲜出炉。但我也是有我的优点的。
+我的实现相比libevent等网络库, 优点更在于使用的便利上, 更好的封装, 更符合C++的OO思维, 简洁而且高效。
+epollreactor, client, tcpport 这三个类就构成了服务器的主体框架, 它们总共区区才八百多行一千行都不到的代码(主体框架)。
+这样简洁，直接，而且是自主开发的代码，对二次开发，维护带来的好处是显而易见的。
+
+先说回效率上, 因为它更加直接说明问题，而后回过头来我说一下我的具体实现。
+下面的测试数据来自于本人笔记本电脑装的CentOS模拟机，在同一台机器上运行服务器和客户端。我相信，换一台电脑虽然具体数据不同，不过结论应该是一样的。
+我做的是pingpong测试, 收包后不作处理，直接发回对端。
+我的程序发布在github上
+https://github.com/ZhongweitaoCcserver/ccserver  我的程序ccserver及 ccpp_client.
+https://github.com/ZhongweitaoCcserver/ccserver_test 测试脚本及测试报告, 我在虚拟机及真实系统CentOS)上均有测试。
+https://github.com/ZhongweitaoCcserver/pp_libevent 是一个用libevent 实现的 pingpong测试, server, 及 client.
+
+(libevent测试程序来自于陈硕, 你可以在网上查得到他, 他开发了一个muduo库, 与我的实现是大不一样的;
+ 他测试他的muduo比libevent,asio快,我测试ccserver比较muduo库, 棋鼓相当吧, 或者我更快;
+ 其实, 说回那句, 效率真不是重点, 因为都足够快了, 一辆超跑，堵在马路上, 再快也没有用。)
+
+篇幅所限, 这里只说单线程, 单个连接, 包文109字节(正好是我一个protobuf 消息的大小, 当然, 收包发包并不进行解码校验等). 此时我的CPU已经不够用了, 100%了。
+case_1> libevent 客户端 连 libevent 服务器  throughput: 1.079 MiB/s, 10474 Msg/s  客户端每秒收10474 个包  (下面以这个为基准)
+case_2> ccpp_client 连     ccserver         throughput: 1.295977 MiB/s, 12467 Msg/s  客户端每秒收12467 个包, 速度高20%左右.
+case_3> libevent 客户端 连 ccserver         throughput: 1.130 MiB/s, 10968 Msg/s  客户端每秒收12467 个包, 速度高5%左右.
+TOP 查看CPU, libevent 客户端  比 ccserver CPU多消耗 8 9 个百分点左右。 client：53.8， ccserver：44.3 ; 同样的任务，libevent多占CPU.
+case_4> ccpp_client 连 libevent 服务器      throughput: 1.191299 MiB/s, 11460 Msg/s 客户端每秒收12467 个包, 速度高10%左右.
+TOP 查看CPU, server 比 ccpp_client CPU多消耗 8 9 个百分点左右。 client：53.6， ccserver：45.4 ; 同样的任务，libevent多占CPU.
+我还测试了10,100,1000,10000个sessions的情况, 在CentOS真实系统上和虚拟机都测试过, 无一例外, 我的实现完胜libevent! 
+其实, case_3, case_4已经说明问题，同样的任务，我的实现占用cpu更少。
+我快的原因, 应该是更少的代码, 更简洁直接的实现。而libevent 封装了太多的东西(实现跨平台目的等).
+这些测试建议你亲自进行，证明我所言非虚，没有说大话。
+
+说回使用的便利性上, 这是我的实现最大的优点。
+你可以看我的服务程序, 我的程序完成了以下这些任务：
+多端口多服务:9996，9997，9998，9999 四个端口，实现四种不同服务并发处理。
+其中: 9998 : pingpong  测试; 
+      9997 : 可以用telnet 链接，echo 功能(顺便实现SHUTDOWN 并闭服务功能，如执行脚本 shutdown_ccserver.sh 即可关闭ccserver); 
+      9999 : 处理google 的 protobuf 包; 这里是模拟处理一个银行存取款的交易。
+      9996 : 可实现代理功能, 如用作 redis 的转发代理(redis 客户端可以连到这个端口, 而后我的程序转发包到redis服务器, 获取服务器应答后再转发回redis客户端)。
+多线程:调用epollreactor::create_reactors(threads_cnt)就可以创建threads_cnt个线程。
+每个client还可以多连接:每个client连接上ccserver后，可以再去连接其它几个服务器, ccserver可以对一个client的多个fid监控事件。参见redis_proxy的实现。
+空闲连接超时断开的处理:timer wheel 算法处理超时连接, 我做了变通处理，更加高效。
+支持读一半或者写一半处理:每个client都有自己的接收发送缓冲。缓冲用redis的sds代码实现，我对sds进行了最小的C++封装，主要是实现RAII.
+                       此外, 还修正了原代码中的一个小瑕疵(请看 sdscpylen() ， 说只是瑕疵, 不算bug, 是因为我查了整个源码, redis没有触碰到这个边界条件),
+                       我用memmove代替了memcpy, 避免了地址复重叠memcpy可能的出错。 我写了测试代码, 地址重叠memcpy的确是会出错的, 在sds.c  最下面有我的测试代码。                                              
+支持批处理: 处理了读一次读入多个业务包或者半个业务包的情形， 如9999端口, 客户端是可以一次发多个withdraw包的。 
+ccpp_client 的命令行参数msg_size即是一次数据发送，包含数据包的个数。
+在读取数据的处理上, 我是利用readv一次读入64K数据, 如果读入数据大于client原接收缓冲，缓冲是可以自动扩大的。缓冲瘦身处理我没有去做, 涉及业务层面了。
+
+我的代码虽然不多, 不过, 基本上覆盖了C++的精华, 体现了OO的设计思想。用到了虚函数,函数指针,模板类,STL,shared_ptr等等, C++的技术特点是得到了充分体现的。 
+我也尝试着用英文写注释, 其实我英文很菜, 见笑了。 我自认为我的代码还是比较通俗易懂的。在这里再作一下说明, 方便你更快的阅读, 节约你的时间。
+一>几个.c 文件及其同名.h头文件, 来自redis。 是一些纯函数，工具类的, 可以迅速略过.如 anet.c,sds.c,sha1.c,util.c,zmalloc.c,log.cc 使用redis的sds作缓冲用。 
+二>bankhall.pb.cc 及.h, google::protobuf 自动生成的, 略过。
+三>剩下的才是主要的
+epollreactor.cc, epollreactor.h: epollreactor类, 框架核心类之一, 对线程进行了封装.
+tcp_port.h: tcp_port类, 框架核心类之二
+client.cc,client.h: client类, 框架核心类之三, (redis_proxy,telnetecho,customer,pp_client 这几个类都是其派生类)
+codec.cc, protobuf解包, bankhall_skills.cc 业务处理。归customer使用.
+
+tcpport 是一个非常之小的类, 有一个回调函数，指定此端口的client类型。这个回调函数应该是一个client的Instance Factory Method. 
+        理解为不同port可以产生不同的client. 这个函数是归epollreactor调用的。 拥有listen_id;
+epollreactor 实现了线程的封装，调用epollreactor::create_reactors(threads_cnt)就可以创建threads_cnt个线程。socket, bind, listen, accept, epoll_wait均在这个类调用。
+        有几个静态函数作为调用接口, 同时对多个reactor进行管理，分配client。 
+        实现事件reactor，拥有epoll_id。 拥有多个tcpport. epollreactor对于事件作监控, 如果是tcpport的listen_id事件则处理掉, accept ,
+        然后调用对应new_client函数, 生成新client. 如不是listen_id 的事件, 则必是一个归属于它的某个client的event;
+        epollreactor不分析事件性质,直接调用client的process_fire_event去处理(不像其它网络库去区分是读事件不是写事件, 再去调用回调函数)。
+        process_fire_event是一个虚函数，意味着派生类自行重写自己的事件处理流程。
+        process_fire_event两个参数, epoll_event fire_event 输入参数, 事件; 
+                                    int *keepalive_sec, 输出参数, 这个用作client 返回给epollreactor, 告之超时断开的秒数. -1 是不做超时处理。
+       与之对应的有事件注册虚函数register_events(int efid, int *cfds, int *cfds_len)
+                         int efid, 入参, 客户从参数中得到所属epollreactor的epoll_id，
+                         int *cfds, int *cfds_len, 出参, 告知epollreactor，此client注册了几个cfd, 凡是这几个cfd有事件到来，均调用此client 的process_fire_event.
+
+client 实现对session的封装，不同的业务应该以此为基类, 实现不同的业务逻辑。我实现了的几个其它业务的client子类，作为样例。

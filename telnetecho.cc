@@ -24,7 +24,7 @@ static const char* find_crlf(const sds in_sds)
     return crlf == end ? NULL : crlf;
 }
 
-int telnetecho::process_fire_event(epoll_event fire_event, int *keepalive_sec)
+int telnetecho::process_fire_event(const epoll_event& fire_event, int *keepalive_sec)
 {
     int ret = read_in_data();
     //CCSERVERLOG(CLL_DEBUG,  "telnetecho::process_fire_event. ret:%d, sds:%s", ret, _in_sds_buf.c_sds);

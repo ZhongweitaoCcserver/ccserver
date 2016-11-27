@@ -21,15 +21,13 @@ class redis_proxy : public client
                  {
                      //cout << "redis_proxy:: creating!" << endl;
                  };
+        virtual ~redis_proxy();
         //int read_in_data(); 
-        int process_fire_event(epoll_event fire_event, int *keepalive_sec);   //decode and process message.
+        int process_fire_event(const epoll_event& fire_event, int *keepalive_sec);   //decode and process message.
         int write_to_client();  //check send to redix vs send to client. 
-        int register_events(int efid, int *cfds, int *cfds_len); 
+        int register_events(int efid, std::vector<int>& cfds); 
         
         static client_ptr create_client(int cfd, string& redis_server_addr, int redis_server_port, string& source_addr);
-        
-        redis_proxy(redis_proxy const& other)=delete;
-        redis_proxy& operator=(redis_proxy const& other)=delete; 
     private:
         int _send_to_redix();
         int _send_to_client();

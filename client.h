@@ -5,6 +5,7 @@
 #ifndef CCSERVER_CLIENT_H
 #define CCSERVER_CLIENT_H
 #include <memory>
+#include <vector>
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
@@ -42,7 +43,8 @@ class client: public std::enable_shared_from_this<client>
         //      cfds--out para, a fid array,
         //      cfds_len--in_out para, in: *cfds_len is the buff len of cfds (the max number of cfd can be register in epoll.); 
         //                            out: how many cfds(save in cfds para) have been registerd. 
-        virtual int register_events(int efid, int *cfds, int *cfds_len);
+        //virtual int register_events(int efid, int *cfds, int *cfds_len);
+        virtual int register_events(int efid, std::vector<int>& cfds);
         
         //Parameters: 
         //      keepalive_sec --out para, notify epollreator remove *this after keepalive_sec if *this is idled. -1 means alive forever!
@@ -54,7 +56,7 @@ class client: public std::enable_shared_from_this<client>
         //Return CLI_OK if success, and the client is still valid.
         //Return CLI_ERR if the fid of client is close or something wrong, then  then client will be destroyed. 
         //Return CLI_PENDING_WRITE if write is block(EAGAIN), then mark it and write again next it.    
-        virtual int process_fire_event(epoll_event fire_event, int *keepalive_sec)
+        virtual int process_fire_event(const epoll_event& fire_event, int *keepalive_sec)
                    { 
                        // Do pingpong test. Copy data from _in_sds_buf to _out_sds_buf, then clear data in _in_sds_buf.
                        // Data in _out_sds_buf will be sent back in write_out_data().

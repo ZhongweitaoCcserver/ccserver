@@ -37,6 +37,7 @@ typedef std::map<int, tcp_port_ptr> tcp_port_map;  //listen_fid is the key.
 typedef std::map<int, client_ptr> client_map; 
 typedef std::map<int, int> timer_wheel; //client_cfd, bucket_idx;
 typedef std::vector<client_ptr> clients; 
+typedef std::multimap<int,int> client_fid_mmap;
 class epollreactor
 {
     public:
@@ -50,7 +51,11 @@ class epollreactor
         static bool wait_for_stop(int wait_out_sec);   //return _all_stop.
         static void set_keepalive_args(int interval_sec, int bucket_cnt); //call _set_keepalive_args for each reactor.
         static void add_client(client_ptr &new_client);        
-        
+
+        ~epollreactor(){close(_efid);};
+        epollreactor(epollreactor const& other)=delete;
+        epollreactor& operator=(epollreactor const& other)=delete; 
+    private:
         epollreactor():_loop_start(false),
                       _stop_flag(false),
                       _timer_fired(false),
@@ -58,8 +63,7 @@ class epollreactor
                      { 
                          _efid = epoll_create1(EPOLL_CLOEXEC);
                      };
-
-        ~epollreactor(){close(_efid);};
+                     
         void start_work_loop()
              {                
                  if (_loop_start) return;                                 
@@ -67,10 +71,8 @@ class epollreactor
                  _working_thread = std::shared_ptr<std::thread> (new std::thread(std::bind(&epollreactor::_work_loop, this)));
                  //working_thread->detach();//test ! ok
              };
-
-        epollreactor(epollreactor const& other)=delete;
-        epollreactor& operator=(epollreactor const& other)=delete; 
-    private:
+             
+             
         static void _accept_tcp_handler(int fd); 
     
         static tcp_port_map _port_map;
@@ -81,7 +83,6 @@ class epollreactor
         static int _timer_interval_sec;  // if _timer_bucket_cnt < 0; don't check Keepalive Client.
         static int _timer_bucket_cnt;    //_timer_interval_sec * _timer_bucket_cnt == _circle_time_sec;
         static int _circle_time_sec; // _circle_time_sec = _timer_interval_sec * _timer_bucket_cnt
-        
         
         void _insert_in_use_wheel(int cfd, int alive_sec);
         void _update_client_alive_sec(int cfd, int alive_sec);
@@ -106,6 +107,7 @@ class epollreactor
         //std::vector<int> _listen_fids;
         std::set<int> _listen_fids;
         client_map _cl_map;
+        client_fid_mmap _cl_fid_mmap;
         std::shared_ptr<std::thread> _working_thread; //_work_loop
         std::shared_ptr<std::thread> _timer_thread;  //run _timer_loop(), call by _start_timer();
         void _accept_tcp_handle(int fid);

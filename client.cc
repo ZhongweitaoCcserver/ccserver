@@ -43,6 +43,7 @@ int client::write_out_data()
     return ret;//CLI_OK, or  CLI_PENDING_WRITE   
 }
 //_efid, &client_cfds, *client_cfds_len
+/*
 int client::register_events(int efid, int *cfds, int *cfds_len)
 {
     if (*cfds_len < 1) return CLI_ERR;
@@ -57,6 +58,20 @@ int client::register_events(int efid, int *cfds, int *cfds_len)
     
     cfds[0] = _cfd;
     *cfds_len = 1;
+    return CLI_OK;
+}*/
+
+int client::register_events(int efid, std::vector<int>& cfds)
+{   
+    char errmsg[ANET_ERR_LEN];
+    //CCSERVERLOG(CLL_DEBUG, "anet_epoll_in_add:efid:%d _cfd:%d", efid, _cfd);
+    int ret = anet_epoll_in_add(errmsg, efid, _cfd);
+    if (ret == ANET_ERR){
+        CCSERVERLOG(CLL_WARNING, " anet_epoll_in_del:%s", errmsg);
+        return ANET_ERR;
+    }
+    
+    cfds.push_back(_cfd);
     return CLI_OK;
 }
 

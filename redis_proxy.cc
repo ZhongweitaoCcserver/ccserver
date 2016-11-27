@@ -13,9 +13,14 @@ client_ptr redis_proxy::create_client(int cfd, string& redis_server_addr, int re
     return new_client;
 }
 
-int redis_proxy::register_events(int efid, int *cfds, int *cfds_len)
+redis_proxy::~redis_proxy()
 {
-    if (*cfds_len < 2) return CLI_ERR;
+    CCSERVERLOG(CLL_DEBUG,  "redis_proxy::~redis_proxy().");
+    close(_redis_cfd);
+}
+
+int redis_proxy::register_events(int efid, std::vector<int>& cfds)
+{
     if (_redis_server_addr.size() ==0) return CLI_ERR;
     
     char errmsg[ANET_ERR_LEN];
@@ -50,14 +55,18 @@ int redis_proxy::register_events(int efid, int *cfds, int *cfds_len)
         return ANET_ERR;
     }
     
-    cfds[0] = _cfd;
+    cfds.push_back(_cfd);
+    cfds.push_back(_redis_cfd);
+    CCSERVERLOG(CLL_WARNING, "redis_client register_events OK");
+    /*cfds[0] = _cfd;
     cfds[1] = _redis_cfd;
-    *cfds_len = 2;
+    *cfds_len = 2;*/
     return CLI_OK;
 }
 
 int redis_proxy::_send_to_redix()
 {
+    CCSERVERLOG(CLL_DEBUG,  "_send_to_redix:%s", _in_sds_buf.c_sds);
     //send data to _redis_cfd directly.
     char errmsg[ANET_ERR_LEN];
     int ret = anet_write_sds_to_fid(errmsg, _redis_cfd, _in_sds_buf );
@@ -88,6 +97,7 @@ int redis_proxy::_process_fire_event_cfd(int *keepalive_sec)
 
 int redis_proxy::_process_fire_event_redis(int *keepalive_sec)
 {
+    CCSERVERLOG(CLL_DEBUG,  "_process_fire_event_redis");
     //read cfd into _out_sds_buf
     char errmsg[ANET_ERR_LEN];
     
@@ -133,8 +143,11 @@ int redis_proxy::write_to_client()
     return ret;
 }
 
-int redis_proxy::process_fire_event(epoll_event fire_event, int *keepalive_sec)
+int redis_proxy::process_fire_event(const epoll_event& fire_event, int *keepalive_sec)
 {
+    CCSERVERLOG(CLL_DEBUG,  "process_fire_event:%d", fire_event.data.fd);
+    *keepalive_sec = 120; 
+    
     if (fire_event.data.fd == _cfd) {
         return _process_fire_event_cfd(keepalive_sec);
     } else if (fire_event.data.fd == _redis_cfd) {
